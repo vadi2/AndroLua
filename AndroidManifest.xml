@@ -17,6 +17,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name="LuaActivity"></activity>
+        <service android:name="Lua" android:permission="android.permission.INTERNET"></service>
 
     </application>
 

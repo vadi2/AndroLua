@@ -40,6 +40,14 @@ public final class LuaJavaAPI
   private LuaJavaAPI()
   {
   }
+  
+  public static void throwLuaException(LuaState L, String e) throws LuaException
+  {
+	L.Lwhere(1);
+	String err = L.toString(-1);
+	L.pop(1);
+	throw new LuaException(err + e);
+  }  
 
   /**
    * Java implementation of the metamethod __index
@@ -114,7 +122,7 @@ public final class LuaJavaAPI
         throw new LuaException("Invalid method call. No such method.");
       }
 
-      Object ret;
+      Object ret = null;
       try
       {
         if(Modifier.isPublic(method.getModifiers()))
@@ -133,7 +141,7 @@ public final class LuaJavaAPI
       }
       catch (Exception e)
       {
-        throw new LuaException(e);
+        throwLuaException(L,e.getMessage());
       }
 
       // Void function returns null
@@ -200,14 +208,14 @@ public final class LuaJavaAPI
 
     synchronized (L)
     {
-      Class clazz;
+      Class clazz = null;
       try
       {
         clazz = Class.forName(className);
       }
       catch (ClassNotFoundException e)
       {
-        throw new LuaException(e);
+    	  throwLuaException(L,e.getMessage());
       }
       Object ret = getObjInstance(L, clazz);
 
@@ -255,14 +263,14 @@ public final class LuaJavaAPI
     
     synchronized (L)
     {
-      Class clazz;
+      Class clazz = null;
       try
       {
         clazz = Class.forName(className);
       }
       catch (ClassNotFoundException e)
       {
-        throw new LuaException(e);
+    	  throwLuaException(L,e.getMessage());
       }
 
       try
@@ -279,7 +287,8 @@ public final class LuaJavaAPI
       }
       catch (Exception e)
       {
-        throw new LuaException("Error on calling method. Library could not be loaded. " + e.getMessage());
+        throwLuaException(L,"Error on calling method. Library could not be loaded. " + e.getMessage());
+        return 0;
       }
     }
   }
@@ -329,22 +338,22 @@ public final class LuaJavaAPI
 	    // If method is null means there isn't one receiving the given arguments
 	    if (constructor == null)
 	    {
-	      throw new LuaException("Invalid method call. No such method.");
+	      throwLuaException(L,"Invalid method call. No such method.");
 	    }
 	
-	    Object ret;
+	    Object ret = null;
 	    try
 	    {
 	      ret = constructor.newInstance(objs);
 	    }
 	    catch (Exception e)
 	    {
-	      throw new LuaException(e);
+	      throwLuaException(L,e.getMessage());
 	    }
 	
 	    if (ret == null)
 	    {
-	      throw new LuaException("Couldn't instantiate java Object");
+	      throwLuaException(L,"Couldn't instantiate java Object");
 	    }
 	
 	    return ret;
@@ -468,7 +477,7 @@ public final class LuaJavaAPI
       try
       {
         if (!(L.isTable(2)))
-          throw new LuaException(
+          throwLuaException(L,
               "Parameter is not a table. Can't create proxy.");
 
         LuaObject luaObj = L.getLuaObject(2);
@@ -478,7 +487,7 @@ public final class LuaJavaAPI
       }
       catch (Exception e)
       {
-        throw new LuaException(e);
+        throwLuaException(L,e.getMessage());
       }
 
       return 1;
@@ -581,12 +590,12 @@ public final class LuaJavaAPI
     }
     else
     {
-      throw new LuaException("Invalid Parameters.");
+      throwLuaException(L,"Invalid Parameters.");
     }
 
     if (!okType)
     {
-      throw new LuaException("Invalid Parameter.");
+      throwLuaException(L,"Invalid Parameter.");
     }
 
     return obj;
