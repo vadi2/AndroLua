@@ -41,21 +41,18 @@ local req = arg[1] or 'no'
 c:send (req..'\n')
 if req == 'yes' then
     require 'winapi'
-    print(c:receive())
-    print 'connecting to secondary..'
+    c:receive()
     c2,err = socket.connect('localhost',3334)
     if err then
       return print('cannot connect to secondary socket',err)
     end
-    print 'threading'
-    --[[
     t = winapi.thread(function()
       while true do
         local res = c2:receive()
-        print(res:gsub('\001','\n'))
+        res = res:gsub('\001','\n')
+        io.write(res)
       end
     end,'ok')
-    ]]
     winapi.sleep(50)
 end
 
@@ -80,17 +77,15 @@ function eval(line)
 end
 
 
- -- --[[
 local init,err = readfile 'init.lua'
 if init then
   print 'loading init.lua'
-  io.write(eval(init)..'\n')
+  eval(init)
 end
---]]
 
 function interp.process_line (line)
     log:write(line,'\n')
-    local cmd,file = line:match '^%.(.)(.*)$'
+    local cmd,file = line:match '^%.(%S+)(.*)$'
     if cmd then
         file = file:gsub('^%s*','')
         file = #file > 0 and file or nil
@@ -98,15 +93,16 @@ function interp.process_line (line)
             expand_macro(macros[cmd],file)
             return
         elseif file then -- either .l (load) or .m (upload module)
-            local mod
-            if cmd == 'm' then
-              mod = file
+            local mod,kind = file,'run'
+            if cmd == 'm' then -- given in Lua module form
               file = mod:gsub('%.','/')..'.lua'
+              kind = 'mod'
             end
             line,err = readfile(file)
-            if mod and line then
-                line = '--mod:'..mod..'\001'..line
+            if err then
+                return print(err)
             end
+            line = '--'..kind..':'..mod..'\001'..line
         else
             return print 'unknown command'
         end

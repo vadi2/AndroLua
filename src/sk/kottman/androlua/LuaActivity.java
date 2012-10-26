@@ -2,120 +2,160 @@ package sk.kottman.androlua;
 
 import android.app.Activity;
 
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.IBinder;
+import android.util.Log;
+import android.view.ContextMenu;
+import android.view.ContextMenu.ContextMenuInfo;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 
 import org.keplerproject.luajava.*;
 
-public class LuaActivity extends Activity {
-	LuaState L;
+public class LuaActivity extends Activity implements ServiceConnection {
+	Lua service;
+	String modName = null;
 	LuaObject modTable;
-	static int REGISTRYINDEX = LuaState.LUA_REGISTRYINDEX.intValue();
+	int argRef = 0;
 
 	/** Called when the activity is first created. */
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
-	    super.onCreate(savedInstanceState);
-	    
+	    super.onCreate(savedInstanceState);	    
 	    Intent intent = getIntent();
-	    String mod = intent.getStringExtra("LUA_MODULE");
-	    
-	    log("module " + mod);
-	
-	    L = Lua.L;
-	    
-	    L.getGlobal("require");
-	    L.pushString(mod);
-	    if (L.pcall(1, 1, 0) != 0) {
-	    	log("require "+L.toString(-1));
-	    	finish();
-	    	return;
-	    }
-	    modTable = L.getLuaObject(-1);
-	    
-	    
-	    try {
-			L.pushObjectValue(this);
-		} catch (LuaException e) {
-			Lua.log("cannot push");
-		}
-	    L.setGlobal("current_activity");
-	    
-	    Object res;
-	    if (modTable.isFunction()) {
-	    	try {
-				res = modTable.call(new Object[]{this, savedInstanceState});
-			} catch (LuaException e) {
-				log("onCreate "+e.getMessage());				
-				res = null;
-			}
-	    	modTable = null;
-	    } else {
-	    	res = invokeMethod("onCreate",this,savedInstanceState);
-	    }
-	    if (res instanceof View) {
-	    	setContentView((View)res);
-	    } else {
-	    	log("onCreate must return a View");
-	    	finish();
-	    	return;
-	    }
-	    
+	    modName = intent.getStringExtra("LUA_MODULE");
+	    argRef = intent.getIntExtra("LUA_MODULE_ARG", 0);
+		Lua.bind(this, this);	    
 	}
-	
-	Object invokeMethod(String name, Object... args) {
-		if (modTable == null)
-			return null;
-		Object res = null;
-	    try {
-			LuaObject f = modTable.getField(name);
-			if (f.isNil())
-				return null;
-			res = f.call(args);
-		} catch (LuaException e) {
-			log("method "+name+": "+e.getMessage());
-		}		
-		return res;
-	}
+
 	
 	@Override
 	protected void onActivityResult(int request, int result, Intent data) {
-		invokeMethod("onActivityResult",request,result,data);
+		service.invokeMethod(modTable,"onActivityResult",request,result,data);
 	}
 	
 	@Override
 	public void onPause() {
 		super.onPause();
-		invokeMethod("onPause");
+		service.invokeMethod(modTable,"onPause");
 	}
 	
 	@Override
 	public void onResume() {
 		super.onResume();
-		invokeMethod("onResume");
+		if (service != null)
+			service.invokeMethod(modTable,"onResume");
 	}
 	
 	@Override
 	public void onStart() {
-		super.onStart();
-		invokeMethod("onStart");
+		super.onStart();		
+		if (service != null)
+			service.invokeMethod(modTable,"onStart");
 	}
 	
 	@Override
 	public void onStop() {
 		super.onStop();
-		invokeMethod("onStop");
+		service.invokeMethod(modTable,"onStop");
 	}
 	
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
-		invokeMethod("onDestroy");
+		service.invokeMethod(modTable,"onDestroy");
+		Lua.unbind(this,this);
+	}
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		Object res = service.invokeMethod(modTable, "onCreateOptionsMenu", menu);
+		return res != null ? (Boolean)res : false;
 	}
 	
-	public void log(String msg) {
-		Lua.log(msg);
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		Object res = service.invokeMethod(modTable, "onOptionsItemSelected", item);
+		if (res == null) {
+			return super.onOptionsItemSelected(item);
+		} else {
+			return true;
+		}
 	}
+	
+	@Override
+	public void onCreateContextMenu(ContextMenu menu, View v,
+	                                ContextMenuInfo menuInfo) {
+	    super.onCreateContextMenu(menu, v, menuInfo);
+	    service.invokeMethod(modTable, "onCreateContextMenu", menu,v,menuInfo);
+	}	
+	
+	@Override
+	public boolean onContextItemSelected(MenuItem item) {
+		Object res = service.invokeMethod(modTable, "onContextItemSelected", item);
+		if (res != null) {
+	       return super.onContextItemSelected(item);
+		} else {
+			return true;
+		}
+	}	
+	
+	public void log(String msg) {
+		service.log(msg);
+	}
+	
+	public void onServiceConnected(ComponentName name, IBinder iservice) {
+		Log.d("lua","setting activity");		
+		service = ((Lua.LocalBinder)iservice).getService();
+		service.setGlobal("activity", this);
+		modTable = service.require(modName);
+		if (modTable == null) {
+			finish();
+			return;
+		}
+	    
+	    service.setGlobal("current_activity",this);
+	    
+	    Object res;
+	    Object arg = null;
+	    if (argRef != 0) {
+	    	arg = LuaObject.fromReference(Lua.L,argRef);
+	    }
+	    try {
+		    if (modTable.isFunction()) {	    	
+				res = modTable.call(new Object[]{this,arg});
+		    	modTable = null;
+		    } else {
+		    	res = service.invokeMethod(modTable,"onCreate",this,arg);
+		    }
+		} catch (LuaException e) {
+			log("onCreate "+e.getMessage());				
+			res = null;
+		}	    
+	    if (res == null) {
+	    	finish();
+	    	return;
+	    }
+	    if (res instanceof View) {
+	    	setContentView((View)res);
+	    } else if (! (res instanceof Boolean)){
+	    	log("onCreate must return a View");
+	    	finish();
+	    	return;
+	    }	    		
+	    
+	    service.invokeMethod(modTable,"onStart");
+	    service.invokeMethod(modTable,"onResume");
+		
+	}
+
+	public void onServiceDisconnected(ComponentName name) {
+		// Really should not be called!
+		this.service = null;
+		
+	}	
 
 }

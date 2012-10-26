@@ -1,6 +1,8 @@
-local packages = {}
+--- import.lua
+-- Basic utilities for making LuaJava more convenient to use.
+
 local append = table.insert
-local new = luajava.new
+local new, bindClass = luajava.new, luajava.bindClass
 
 local function new_tostring (o)
    return o:toString()
@@ -14,30 +16,14 @@ end
 local function call (t,...)
     local obj,stat
     if select('#',...) == 1 and type(select(1,...))=='table' then
---~         local ptype = primitive_type(t)
---~         t = ptype or t
+        local ptype = primitive_type(t)
+        t = ptype or t
         obj = make_array(t,select(1,...))
     else
         stat,obj = pcall(new,t,...)
---~         if not stat then
---~             print(debug.traceback())
---~             os.exit(1)
---~         end
     end
 	getmetatable(obj).__tostring = new_tostring
 	return obj
-end
-
-local function import_class (classname,packagename,no_global)
-    local res,class = pcall(luajava.bindClass,packagename)
-    if res then
-        if not no_global then
-            _G[classname] = class
-        end
-        local mt = getmetatable(class)
-        mt.__call = call
-        return class
-    end
 end
 
 local function massage_classname (classname)
@@ -47,34 +33,89 @@ local function massage_classname (classname)
     return classname
 end
 
-local globalMT = {
+local classes = {}
+
+--- import a Java class.
+-- Like `luajava.bindClass` except it caches classes by class name
+-- and makes the result callable, ending the need for explicit `luajava.new` calls.
+-- @param klassname - the fully qualified Java class name
+function bind (klassname)
+    local res
+    klassname = massage_classname(klassname)
+    if not classes[klassname] then
+        local res,class = pcall(bindClass,klassname)
+        if res then
+            local mt = getmetatable(class)
+            mt.__call = call
+            classes[klassname] = class
+            return class
+        else
+            return nil,class
+        end
+    else
+        return classes[klassname]
+    end
+end
+
+function import_class (classname,packagename,T)
+    local class,err = bind(packagename)
+    if class then
+        T[classname] = class
+    end
+    return class,err
+end
+
+local lookupMT = {
 	__index = function(T,classname)
-            classname = massage_classname(classname)
-			for i,p in ipairs(packages) do
-                local class = import_class(classname,p..classname)
-                if class then return class end
-			end
-            --print("import cannot find "..classname)
+        classname = massage_classname(classname)
+        for i,p in ipairs(T._packages) do
+            local class = import_class(classname,p..classname,T)
+            if class then return class end
+        end
+        error("cannot find "..classname)
 	end
 }
-setmetatable(_G, globalMT)
 
-function import (package)
-    local i = package:find('%.%*$')
+--- represents a Java package.
+-- @param P the full package path
+-- @param T optional table to receive the cached results
+function luajava.package (P,T)
+    local pack = T or {}
+    if P ~= '' then P = P..'.' end
+    pack._packages={P}
+    setmetatable(pack,lookupMT)
+    return pack
+end
+
+--- convenient way to access Java classes globally.
+-- However, not a good idea in larger programs. You will have
+-- to call `luajava.set_global_package_search` or set the global
+--  `GLOBAL_PACKAGE_SEARCH` before requiring `import`.
+-- @param P a package path to add to the global lookup paths.
+function import (P)
+    if not rawget(_G,'_packages') then
+        error('global package lookup not initialized')
+    end
+    local i = P:find('%.%*$')
     if i then -- a wildcard; put into the package list, including the final '.'
-        append(packages,package:sub(1,i))
+        append(_G._packages,P:sub(1,i))
     else
-        local classname = package:match('([%w_]+)$')
-        local klass = import_class(classname,package)
+        local classname = P:match('([%w_]+)$')
+        local klass = import_class(classname,P)
         if not klass then
-            error("cannot find "..package)
+            error("cannot find "..P)
         end
         return klass
     end
 end
 
-append(packages,'')
+--- enable global lookup of java classes
+function luajava.set_global_package_search()
+    luajava.package('',_G)
+end
 
+--- create a 'class' implementing a Java interface.
+-- Thin wrapper over `luajava.createProxy`
 function proxy (classname,obj)
     classname = massage_classname(classname)
 	-- if the classname contains dots it's assumed to be fully qualified
@@ -82,42 +123,29 @@ function proxy (classname,obj)
 		return luajava.createProxy(classname,obj)
 	end
 	-- otherwise, it must lie on the package path!
-	for i,p in ipairs(packages) do
-		local ok,res = pcall(luajava.createProxy,p..classname, obj)
-		if ok then return res end
-	end
+    if rawget(_G,'_packages') then
+        for i,p in ipairs(_G._packages) do
+            local ok,res = pcall(luajava.createProxy,p..classname, obj)
+            if ok then return res end
+        end
+    end
 	error ("cannot find "..classname)
 end
 
-
+--- return a Lua iterator over an Iterator.
 function enum(e)
-   --local e = o:GetEnumerator()
    return function()
-      if e:hasMoreElements() then
-        return e:nextElement()
+      if e:hasNext() then
+        return e:next()
      end
    end
 end
 
-function dump (t)
-    for k,v in pairs(t) do
-        print(k,v)
-    end
-end
+local Array = bind 'java.lang.reflect.Array'
 
-function p (o)
-    if type(o) == 'userdata' then
-		local mt = getmetatable(o)
-		if not mt.__tostring then
-			return print('java:'..o:toString())
-		end
-	end
-	print(type(o)..':'..tostring(o))
-end
-
-import 'java.lang.reflect.Array'
-import 'android.util.Log'
-
+--- create a Java array.
+-- @param Type Java type
+-- @param list table of Lua values, or a size
 function make_array (Type,list)
     local len
     local init = type(list)=='table'
@@ -128,8 +156,6 @@ function make_array (Type,list)
     end
     local arr = Array:newInstance(Type,len)
     if arr == nil then return end
-    Log:d('lua',tostring(arr))
-    ARRAY = arr
     if init then pcall(function()
         for i,v in ipairs(list) do
             Array:set(arr,i-1,v)
@@ -140,6 +166,10 @@ function make_array (Type,list)
 end
 
 
-import 'java.lang.*'
-import 'java.util.*'
+if GLOBAL_PACKAGE_SEARCH then
+    luajava.set_global_package_search()
+    import 'java.lang.*'
+    import 'java.util.*'
+end
+
 

@@ -18,6 +18,7 @@
 ** ===================================================================
 */
 
+#define LUA_USE_LINUX
 
 /*
 @@ LUA_ANSI controls the use of non-ansi features.
@@ -36,7 +37,7 @@
 #if defined(LUA_USE_LINUX)
 #define LUA_USE_POSIX
 #define LUA_USE_DLOPEN		/* needs an extra library: -ldl */
-#define LUA_USE_READLINE	/* needs some extra libraries */
+//#define LUA_USE_READLINE	/* needs some extra libraries */
 #endif
 
 #if defined(LUA_USE_MACOSX)

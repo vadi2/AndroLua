@@ -1,5 +1,5 @@
 /*
- * $Id: LuaState.java,v 1.9 2006/12/22 14:06:40 thiago Exp $
+ * $Id: LuaState.java,v 1.11 2007/09/17 19:28:40 thiago Exp $
  * Copyright (C) 2003-2007 Kepler Project.
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -27,7 +27,7 @@ package org.keplerproject.luajava;
 /**
  * LuaState if the main class of LuaJava for the Java developer.
  * LuaState is a mapping of most of Lua's C API functions.
- * LuaState also provides many other functions that will be used to manipulate 
+ * LuaState also provides many other functions that will be used to manipulate
  * objects between Lua and Java.
  * @author Thiago Ponte
  */
@@ -54,31 +54,25 @@ public class LuaState
    * will be returned by a call.
    */
   final public static Integer LUA_MULTRET   = new Integer(-1);
-  
+
   /*
    * error codes for `lua_load' and `lua_pcall'
    */
-  /**
-   * a runtime error.
-   */
-  final public static Integer LUA_ERRRUN    = new Integer(1);
-  
-  /**
-   * 
-   */
-  final public static Integer LUA_YIELD     = new Integer(2);
-  
-  /**
-   * syntax error during pre-compilation.
-   */
+
+  final public static Integer LUA_YIELD    = new Integer(1);
+
+  /** a runtime error. */
+  final public static Integer LUA_ERRRUN     = new Integer(2);
+
+  /** syntax error during pre-compilation. */
   final public static Integer LUA_ERRSYNTAX = new Integer(3);
-  
+
   /**
-   * memory allocation error. For such errors, Lua does not call 
+   * memory allocation error. For such errors, Lua does not call
    * the error handler function.
    */
   final public static Integer LUA_ERRMEM    = new Integer(4);
-  
+
   /**
    * error while running the error handler function.
    */
@@ -127,7 +121,7 @@ public class LuaState
     _close(luaState);
     this.luaState = null;
   }
-  
+
   /**
    * Returns <code>true</code> if state is closed.
    */
@@ -160,7 +154,7 @@ public class LuaState
   private synchronized native void _insert(CPtr ptr, int idx);
   private synchronized native void _replace(CPtr ptr, int idx);
   private synchronized native int  _checkStack(CPtr ptr, int sz);
-  
+
   private synchronized native void _xmove(CPtr from, CPtr to, int n);
 
   // Access functions
@@ -214,7 +208,7 @@ public class LuaState
   private synchronized native int _yield(CPtr ptr, int nResults);
   private synchronized native int _resume(CPtr ptr, int nargs);
   private synchronized native int _status(CPtr ptr);
-  
+
   // Gargabe Collection Functions
   final public static Integer LUA_GCSTOP       = new Integer(0);
   final public static Integer LUA_GCRESTART    = new Integer(1);
@@ -242,18 +236,18 @@ public class LuaState
   private synchronized native int  _isThread(CPtr ptr, int idx);
   private synchronized native int  _isNone(CPtr ptr, int idx);
   private synchronized native int  _isNoneOrNil(CPtr ptr, int idx);
-  
+
   private synchronized native void _setGlobal(CPtr ptr, String name);
   private synchronized native void _getGlobal(CPtr ptr, String name);
-  
+
   private synchronized native int  _getGcCount(CPtr ptr);
 
 
   // LuaLibAux
-  private synchronized native int _LdoFile(CPtr ptr, String fileName);
+  private static synchronized native int _LdoFile(CPtr ptr, String fileName);
   private synchronized native int _LdoString(CPtr ptr, String string);
   //private synchronized native int _doBuffer(CPtr ptr, byte[] buff, long sz, String n);
-  
+
   private synchronized native int    _LgetMetaField(CPtr ptr, int obj, String e);
   private synchronized native int    _LcallMeta(CPtr ptr, int obj, String e);
   private synchronized native int    _Ltyperror(CPtr ptr, int nArg, String tName);
@@ -262,33 +256,33 @@ public class LuaState
   private synchronized native String _LoptString(CPtr ptr, int numArg, String def);
   private synchronized native double _LcheckNumber(CPtr ptr, int numArg);
   private synchronized native double _LoptNumber(CPtr ptr, int numArg, double def);
-  
+
   private synchronized native int    _LcheckInteger(CPtr ptr, int numArg);
   private synchronized native int    _LoptInteger(CPtr ptr, int numArg, int def);
-  
+
   private synchronized native void _LcheckStack(CPtr ptr, int sz, String msg);
   private synchronized native void _LcheckType(CPtr ptr, int nArg, int t);
   private synchronized native void _LcheckAny(CPtr ptr, int nArg);
-  
+
   private synchronized native int  _LnewMetatable(CPtr ptr, String tName);
   private synchronized native void _LgetMetatable(CPtr ptr, String tName);
-  
+
   private synchronized native void _Lwhere(CPtr ptr, int lvl);
-  
+
   private synchronized native int  _Lref(CPtr ptr, int t);
   private synchronized native void _LunRef(CPtr ptr, int t, int ref);
-  
+
   private synchronized native int  _LgetN(CPtr ptr, int t);
   private synchronized native void _LsetN(CPtr ptr, int t, int n);
-  
+
   private synchronized native int _LloadFile(CPtr ptr, String fileName);
   private synchronized native int _LloadBuffer(CPtr ptr, byte[] buff, long sz, String name);
   private synchronized native int _LloadString(CPtr ptr, String s);
 
   private synchronized native String _Lgsub(CPtr ptr, String s, String p, String r);
   private synchronized native String _LfindTable(CPtr ptr, int idx, String fname, int szhint);
-  
-  
+
+
   private synchronized native void _openBase(CPtr ptr);
   private synchronized native void _openTable(CPtr ptr);
   private synchronized native void _openIo(CPtr ptr);
@@ -344,7 +338,7 @@ public class LuaState
   {
     return _checkStack(luaState, sz);
   }
-  
+
   public void xmove(LuaState to, int n)
   {
     _xmove(luaState, to.luaState, n);
@@ -366,7 +360,7 @@ public class LuaState
   {
     return (_isFunction(luaState, idx)!=0);
   }
-  
+
   public boolean isCFunction(int idx)
   {
     return (_isCFunction(luaState, idx)!=0);
@@ -386,22 +380,22 @@ public class LuaState
   {
     return (_isBoolean(luaState, idx)!=0);
   }
-  
+
   public boolean isNil(int idx)
   {
 	  return (_isNil(luaState, idx)!=0);
   }
-  
+
   public boolean isThread(int idx)
   {
 	  return (_isThread(luaState, idx)!=0);
   }
-  
+
   public boolean isNone(int idx)
   {
 	  return (_isNone(luaState, idx)!=0);
   }
-  
+
   public boolean isNoneOrNil(int idx)
   {
 	  return (_isNoneOrNil(luaState, idx)!=0);
@@ -441,7 +435,7 @@ public class LuaState
   {
 	  return _toInteger(luaState, idx);
   }
-  
+
   public boolean toBoolean(int idx)
   {
     return (_toBoolean(luaState, idx)!=0);
@@ -451,12 +445,12 @@ public class LuaState
   {
     return _toString(luaState, idx);
   }
-  
+
   public int strLen(int idx)
   {
     return _strlen(luaState, idx);
   }
-  
+
   public int objLen(int idx)
   {
 	  return _objlen(luaState, idx);
@@ -466,9 +460,9 @@ public class LuaState
   {
     return new LuaState(_toThread(luaState, idx));
   }
-  
+
   //PUSH FUNCTIONS
-  
+
   public void pushNil()
   {
     _pushNil(luaState);
@@ -478,7 +472,7 @@ public class LuaState
   {
     _pushNumber(luaState, db);
   }
-  
+
   public void pushInteger(int integer)
   {
 	  _pushInteger(luaState, integer);
@@ -499,7 +493,7 @@ public class LuaState
     else
       _pushString(luaState, bytes, bytes.length);
   }
-  
+
   public void pushBoolean(boolean bool)
   {
     _pushBoolean(luaState, bool ? 1 : 0);
@@ -511,7 +505,7 @@ public class LuaState
   {
     _getTable(luaState, idx);
   }
-  
+
   public void getField(int idx, String k)
   {
 	  _getField(luaState, idx, k);
@@ -526,7 +520,7 @@ public class LuaState
   {
     _rawGetI(luaState, idx, n);
   }
-  
+
   public void createTable(int narr, int nrec)
   {
 	  _createTable(luaState, narr, nrec);
@@ -549,12 +543,12 @@ public class LuaState
   }
 
   // SET FUNCTIONS
-  
+
   public void setTable(int idx)
   {
     _setTable(luaState, idx);
   }
-  
+
   public void setField(int idx, String k)
   {
 	  _setField(luaState, idx, k);
@@ -602,22 +596,22 @@ public class LuaState
   {
   	return _resume(luaState, nArgs);
   }
-  
+
   public int status()
   {
 	  return _status(luaState);
   }
-  
+
   public int gc(int what, int data)
   {
     return _gc(luaState, what, data);
   }
-  
+
   public int getGcCount()
   {
     return _getGcCount(luaState);
   }
-  
+
   public int next(int idx)
   {
   	return _next(luaState, idx);
@@ -646,132 +640,132 @@ public class LuaState
   {
     return _LdoString(luaState, str);
   }
-    
+
   public int LgetMetaField(int obj, String e)
   {
     return _LgetMetaField(luaState, obj, e);
   }
-  
+
   public int LcallMeta(int obj, String e)
   {
     return _LcallMeta(luaState, obj, e);
   }
-  
+
   public int Ltyperror(int nArg, String tName)
   {
     return _Ltyperror(luaState, nArg, tName);
   }
-  
+
   public int LargError(int numArg, String extraMsg)
   {
     return _LargError(luaState, numArg, extraMsg);
   }
-  
+
   public String LcheckString(int numArg)
   {
     return _LcheckString(luaState, numArg);
   }
-  
+
   public String LoptString(int numArg, String def)
   {
     return _LoptString(luaState, numArg, def);
   }
-  
+
   public double LcheckNumber(int numArg)
   {
     return _LcheckNumber(luaState, numArg);
   }
-  
+
   public double LoptNumber(int numArg, double def)
   {
     return _LoptNumber(luaState, numArg, def);
   }
-  
+
   public int LcheckInteger(int numArg)
   {
 	  return _LcheckInteger(luaState, numArg);
   }
-  
+
   public int LoptInteger(int numArg, int def)
   {
 	  return _LoptInteger(luaState, numArg, def);
   }
-  
+
   public void LcheckStack(int sz, String msg)
   {
     _LcheckStack(luaState, sz, msg);
   }
-  
+
   public void LcheckType(int nArg, int t)
   {
     _LcheckType(luaState, nArg, t);
   }
-  
+
   public void LcheckAny(int nArg)
   {
     _LcheckAny(luaState, nArg);
   }
-  
+
   public int LnewMetatable(String tName)
   {
     return _LnewMetatable(luaState, tName);
   }
-  
+
   public void LgetMetatable(String tName)
   {
     _LgetMetatable(luaState, tName);
   }
-  
+
   public void Lwhere(int lvl)
   {
     _Lwhere(luaState, lvl);
   }
-  
+
   public int Lref(int t)
   {
     return _Lref(luaState, t);
   }
-  
+
   public void LunRef(int t, int ref)
   {
     _LunRef(luaState, t, ref);
   }
-  
+
   public int LgetN(int t)
   {
     return _LgetN(luaState, t);
   }
-  
+
   public void LsetN(int t, int n)
   {
     _LsetN(luaState, t, n);
   }
-  
+
   public int LloadFile(String fileName)
   {
     return _LloadFile(luaState, fileName);
   }
-  
+
   public int LloadString(String s)
   {
     return _LloadString(luaState, s);
   }
-  
+
   public int LloadBuffer(byte[] buff, String name)
   {
     return _LloadBuffer(luaState, buff, buff.length, name);
   }
-  
+
   public String Lgsub(String s, String p, String r)
   {
 	  return _Lgsub(luaState, s, p, r);
   }
-  
+
   public String LfindTable(int idx, String fname, int szhint)
   {
 	  return _LfindTable(luaState, idx, fname, szhint);
   }
-  
+
   //IMPLEMENTED C MACROS
 
   public void pop(int n)
@@ -794,7 +788,7 @@ public class LuaState
     //setTable(LUA_GLOBALSINDEX.intValue());
 	_setGlobal(luaState, name);
   }
-  
+
   // Functions to open lua libraries
   public void openBase()
   {
@@ -866,6 +860,13 @@ public class LuaState
   private synchronized native void _pushJavaObject(CPtr L, Object obj);
 
   /**
+   * Pushes a Java Array into the state stack
+   * @param L
+   * @param obj
+   */
+  private synchronized native void _pushJavaArray(CPtr L, Object obj);
+
+  /**
    * Pushes a JavaFunction into the state stack
    * @param L
    * @param func
@@ -910,6 +911,14 @@ public class LuaState
   public void pushJavaObject(Object obj)
   {
     _pushJavaObject(luaState, obj);
+  }
+
+  public void pushJavaArray(Object obj) throws LuaException
+  {
+	  if (!obj.getClass().isArray())
+		  throw new LuaException("Object is not an array.");
+
+	  _pushJavaArray(luaState, obj);
   }
 
   /**
@@ -966,9 +975,9 @@ public class LuaState
       LuaObject ref = (LuaObject) obj;
       ref.push();
     }
-    else if (obj instanceof byte[])
+    else if (obj.getClass().isArray())
     {
-      pushString((byte[]) obj);
+   	 pushJavaArray(obj);
     }
     else
     {
@@ -1066,7 +1075,7 @@ public class LuaState
 
 		return new LuaObject(parent, name);
 	}
-	
+
 	/**
 	 * This constructor creates a LuaObject from a table that is indexed by any LuaObject.
 	 * @param parent The Lua Table or Userdata that contains the Field.
@@ -1098,7 +1107,7 @@ public class LuaState
 	/**
 	 * When you call a function in lua, it may return a number, and the
 	 * number will be interpreted as a <code>Double</code>.<br>
-	 * This function converts the number into a type specified by 
+	 * This function converts the number into a type specified by
 	 * <code>retType</code>
 	 * @param db lua number to be converted
 	 * @param retType type to convert to
@@ -1162,23 +1171,8 @@ public class LuaState
         return new Short(db.shortValue());
       }
     }
-    
-    // if all checks fail, return null
-    return null;	  
-	}
 
-	public String dumpStack() {
-		int n = getTop();
-		StringBuilder sb = new StringBuilder();
-		for (int i = 1; i <= n; i++) {
-			int t = type(i);
-			sb.append(i).append(": ").append(typeName(t));
-			if (t == LUA_TNUMBER)
-				sb.append(" = ").append(toNumber(i));
-			else if (t == LUA_TSTRING)
-				sb.append(" = '").append(toString(i)).append("'");
-			sb.append("\n");
-		}
-		return sb.toString();
+    // if all checks fail, return null
+    return null;
 	}
 }
