@@ -10,11 +10,7 @@ import android.content.res.AssetManager;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.IInterface;
-import android.os.Parcel;
-import android.os.RemoteException;
 import android.util.Log;
-import android.view.View;
 
 import java.io.*;
 import java.net.*;
@@ -25,13 +21,14 @@ public class Lua extends Service {
 	private final static int LISTEN_PORT = 3333, PRINT_PORT = 3334;
 	private final static char REPLACE = '\001';
 	public static LuaState L = null;
-	boolean printToString = true;
-	PrintWriter printer = null;
+	static boolean printToString = true;
+	static PrintWriter printer = null;
+	static Lua main_instance = null;
 	
 	static final StringBuilder output = new StringBuilder();
 
 	Handler handler;
-	ServerThread serverThread;
+	static ServerThread serverThread;
 	
 	// the binder just returns this service...
 	public class LocalBinder extends Binder {
@@ -42,14 +39,10 @@ public class Lua extends Service {
 	
 	private final IBinder binder = new LocalBinder();	
 	
-	void initialize() {
-		L = LuaStateFactory.newLuaState();
+	public static LuaState newState(boolean startServer) {
+		LuaState L = LuaStateFactory.newLuaState();
 		L.openLibs();
-		
-
 		try {
-			setGlobal("service",this);
-			
 			JavaFunction print = new JavaFunction(L) {
 				@Override
 				public int execute() throws LuaException {
@@ -73,10 +66,12 @@ public class Lua extends Service {
 					}
 					output.append("\n");
 					
-					if (! printToString && printer != null) {
-						printer.println(output.toString() + REPLACE);
-						printer.flush();
-						output.setLength(0);						
+					synchronized (L) {
+						if (! printToString && printer != null) {
+							printer.println(output.toString() + REPLACE);
+							printer.flush();
+							output.setLength(0);						
+						}
 					}
 					
 					return 0;
@@ -88,8 +83,9 @@ public class Lua extends Service {
 				public int execute() throws LuaException {
 					String name = L.toString(-1);
 
-					AssetManager am = getAssets();
+					AssetManager am = main_instance.getAssets();
 					try {
+						name = name.replace('.', '/');
 						InputStream is = am.open(name + ".lua");
 						byte[] bytes = readAll(is);
 						L.LloadBuffer(bytes, name);
@@ -101,38 +97,10 @@ public class Lua extends Service {
 						return 1;
 					}
 				}
-			};		
-			
-			JavaFunction cocreate = new JavaFunction(L) {
-				@Override
-				public int execute() throws LuaException {
-					L.remove(1);
-					
-					LuaState l = L.newThread();
-					/*
-					int n = L.getTop(); 
-					for (int i = 1; i <= n; i++) {
-						//L.pushString(L.typeName(i));
-						log(i+": "+L.typeName(L.type(i)));
-					}
-					*/
-					//int i2 = L.getTop();
-					//L.pushInteger(i1);
-					//L.pushInteger(i2);
-					L.pushValue(1);
-					L.xmove(l, 1);
-					L.pop(1);
-					//L.pushValue(-1);
-					return 1;
-					//L.pushObjectValue(L);
-					//L.pushObjectValue(l);
-					//return 2;
-				}
 			};
-
-			print.register("print");
-			cocreate.register("cocreate");
 			
+			print.register("print");
+
 			L.getGlobal("package");            // package
 			L.getField(-1, "loaders");         // package loaders
 			int nLoaders = L.objLen(-1);       // package loaders
@@ -142,19 +110,21 @@ public class Lua extends Service {
 			L.pop(1);                          // package
 						
 			L.getField(-1, "path");            // package path
-			String customPath = getFilesDir() + "/?.lua";
+			String customPath = main_instance.getFilesDir() + "/?.lua";
 			L.pushString(";" + customPath);    // package path custom
 			L.concat(2);                       // package pathCustom
 			L.setField(-2, "path");            // package
 			L.pop(1);
 		} catch (Exception e) {
-			log("Cannot override print "+e.getMessage());
+			Log.d("lua","Cannot override print "+e.getMessage());
 		}			
 		
-		serverThread = new ServerThread();
-		serverThread.start();
+		if (startServer) {
+			serverThread = main_instance.new ServerThread();
+			serverThread.start();
+		}
 		
-		
+		return L;
 	}
 
 	
@@ -163,9 +133,11 @@ public class Lua extends Service {
 		handler = new Handler();
 		
 		log("starting Lua service");
-		if (L == null)
-			initialize();
-
+		if (L == null) {
+			main_instance = this;
+			L = newState(true);
+			setGlobal("service",this);
+		}
 		
 		return START_STICKY;
 	}
@@ -211,6 +183,15 @@ public class Lua extends Service {
 		return new LuaListAdapter(this,me,o);
 	}
 	
+	public boolean createLuaThread(String mod, Object arg, Object progress, Object post) {
+		if (progress != null && ! (progress instanceof LuaObject))
+			return false;
+		if (post != null && ! (post instanceof LuaObject))
+			return false;
+		new LuaThread((LuaObject)progress,(LuaObject)post).execute(mod,arg);
+		return true;
+	}	
+	
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
@@ -219,7 +200,7 @@ public class Lua extends Service {
 		L.close();
 	}
 	
-	public void log(String msg) {
+	public static void log(String msg) {
 		if (printer != null) {
 			printer.println(msg + REPLACE);
 			printer.flush();
@@ -234,7 +215,7 @@ public class Lua extends Service {
 		if (ok == 0) {
 			L.getGlobal("debug");
 			L.getField(-1, "traceback");
-			L.remove(-2); 
+			L.remove(-2);
 			L.insert(-2);
 			printToString = true;
 			ok = L.pcall(0, 0, -2);
@@ -252,7 +233,7 @@ public class Lua extends Service {
 	
 	public void setGlobal(String name, Object value) {
 		L.pushJavaObject(value);
-		L.setGlobal(name);
+		L.setGlobal(name); 
 	}
 	
 	public LuaObject require(String mod) {
@@ -332,28 +313,35 @@ public class Lua extends Service {
 			stopped = false;
 			try {
 				server = new ServerSocket(LISTEN_PORT);
+				ServerSocket writeServer = new ServerSocket(PRINT_PORT);
 				log("Server started on port " + LISTEN_PORT);
 				while (!stopped) {
 					client = server.accept();					
+					Log.d("client","client accepted");
 					BufferedReader in = new BufferedReader(
 							new InputStreamReader(client.getInputStream()));
 					final PrintWriter out = new PrintWriter(client.getOutputStream());
 					String line = in.readLine();
-					if (line.equals("yes")) {
-						ServerSocket writeServer = new ServerSocket(PRINT_PORT);
+					if (line.equals("yes")) {						
 						out.println("waiting ");
 						out.flush();						
 						writer = writeServer.accept();
+						//Log.d("client","writer accepted");
 						printer = new PrintWriter(writer.getOutputStream());						
+					} else {
+						writer = null;
+						printer = null;
 					}
 					while (!stopped && (line = in.readLine()) != null) {						
 						final String s = line.replace(REPLACE, '\n');
 						if (s.startsWith("--mod:")) {
 							String mod = extractLuaFilename(s); 
 							String file = getFilesDir()+"/"+mod.replace('.', '/')+".lua";
+							File path = new File(file).getParentFile();
+							path.mkdirs();
 							FileWriter fw = new FileWriter(file);
 							fw.write(s);
-							fw.close();	
+							fw.close();	 
 							// package.loaded[mod] = nil
 							L.getGlobal("package");
 							L.getField(-1, "loaded");
@@ -377,15 +365,21 @@ public class Lua extends Service {
 							});
 						}
 					}
+					//Log.d("client","client disconnect");
+					client.close();
+					if (writer != null)
+						writer.close();
 				}
 				server.close();
+				writeServer.close();
 			} catch (Exception e) {
+				Log.d("client","server "+e.toString());
 				log(e.toString());
 			}
 		}
 		
 		private String extractLuaFilename(String s) {
-			int i1 = s.indexOf(':'), i2 = s.indexOf('\n');
+			int i1 = s.indexOf(':'), i2 = s.indexOf('\n'); 
 			return s.substring(i1+1,i2); 
 		}
 
@@ -403,7 +397,7 @@ public class Lua extends Service {
 	
 	private static byte[] readAll(InputStream input) throws Exception {
 		ByteArrayOutputStream output = new ByteArrayOutputStream(4096);
-		byte[] buffer = new byte[4096];
+		byte[] buffer = new byte[4096]; 
 		int n = 0;
 		while (-1 != (n = input.read(buffer))) {
 			output.write(buffer, 0, n);

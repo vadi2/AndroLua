@@ -5,9 +5,10 @@
 -- Note that `ctrls` is a cunning lazy table for accessing named
 -- controls in the layout!
 
-local main = require 'android'.new()
+main = require 'android'.new()
 
 local SMM = bind 'android.text.method.ScrollingMovementMethod'
+local InputType = bind 'android.text.InputType'
 
 function main.create(me)
     local a = me.a
@@ -32,6 +33,22 @@ function main.create(me)
             me:toast(err,true)
         end
     end)
+
+    local input_type = ctrls.source:getInputType()
+    input_type = InputType.TYPE_CLASS_TEXT + InputType.TYPE_TEXT_FLAG_MULTI_LINE
+    ctrls.source:setInputType( input_type + InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
+
+    local function launch (name)
+        return function() me:luaActivity('example.'..name) end
+    end
+
+    me:context_menu {
+        view = ctrls.source;
+        "list",launch 'list',
+        "draw",launch 'draw',
+        "pretty",launch 'pretty',
+
+    }
     return true
 end
 

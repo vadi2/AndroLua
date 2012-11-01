@@ -51,23 +51,6 @@ function list.create (me,arg)
         end
     end)
 
-    -- Random Demonstration of old-style option and context menus
-    local function show (item,id)
-        print(item,id)
-    end
-
-    me:options_menu {
-        'alpha|android.btn_plus',show,
-        'beta|android.btn_minus',show,
-        'gamma|android.btn_star',show,
-        'delta|icon',show,
-    }
-
-    me:context_menu {
-        view = lv;
-        'one',show,
-        'two',show,
-    }
     return lv
 end
 

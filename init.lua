@@ -12,3 +12,4 @@ A = PK 'android'
 L = PK 'java.lang'
 U = PK 'java.util'
 
+ss = L.String{'one','two'}

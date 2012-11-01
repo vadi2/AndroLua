@@ -1,4 +1,21 @@
+#!/usr/bin/env lua
 require 'socket'
+local has_linenoise, linenoise = pcall(require,'linenoise')
+local has_posix, posix = pcall(require,'posix')
+
+if has_linenoise then
+    function readline(prompt)
+           local line, err = linenoise.linenoise(prompt)
+           if not line then return nil end
+           linenoise.historyadd(line)
+           return line
+    end
+else
+    function readline(prompt)
+        io.write(prompt)
+        return io.read()
+    end
+end
 
 interp = {}
 
@@ -34,27 +51,31 @@ if f then
     dofile 'defs.lua'
 end
 
-
 local t,c2,err
-local addr = arg[2] or 'localhost'
+local addr = arg[1] or 'localhost'
 local c = socket.connect(addr,3333)
-local req = arg[1] or 'no'
+print('connected to '..addr..':3333')
+local req = arg[2] or 'yes'
 c:send (req..'\n')
 if req == 'yes' then
-    require 'winapi'
-    c:receive()
-    c2,err = socket.connect(addr,3334)
-    if err then
-      return print('cannot connect to secondary socket',err)
+    if not has_posix then
+        print 'you need luaposix for accessing log socket'
+    else
+        c:receive()
+        c2,err = socket.connect(addr,3334)
+        if err then
+          return print('cannot connect to secondary socket',err)
+        end
+        t = posix.fork()
+        if t == 0 then -- run function as child
+           while true do
+              local res = c2:receive()
+              res = res:gsub('\001','\n')
+              io.write(res)
+            end
+            posix._exit(0)
+        end
     end
-    t = winapi.thread(function()
-      while true do
-        local res = c2:receive()
-        res = res:gsub('\001','\n')
-        io.write(res)
-      end
-    end,'ok')
-    winapi.sleep(50)
 end
 
 local log = io.open('log.txt','a')
@@ -128,19 +149,18 @@ function interp.process_line (line)
     end
 end
 
-io.write '> '
-local line = io.read()
+local line = readline '> '
 
 while line do
   interp.process_line(line)
-  io.write '> '
-  line = io.read()
+  line = readline '> '
 end
 
 log:close()
 c:close()
 
 if c2 then
-    if t then t:kill() end
     c2:close()
+    if t then posix.kill(t) end    
 end
+

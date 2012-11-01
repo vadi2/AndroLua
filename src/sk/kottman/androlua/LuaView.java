@@ -6,16 +6,14 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.graphics.Canvas;
 
-public class LuaView extends View { // implements OnClickListener {
+public class LuaView extends View { 
 	Lua service;
-	Object modTable;
-	
+	Object modTable;	
 	
 	public LuaView(Context c, Lua lc, Object mod) {
 		super(c);
 		service = lc;
 		modTable = mod;
-		//setOnClickListener(this);
 	}
 	
 	@Override
@@ -34,10 +32,5 @@ public class LuaView extends View { // implements OnClickListener {
 		service.invokeMethod(modTable, "onSizeChanged", w,h,oldw,oldh);
 	}
 	
-	/*
-	public void onClick(View v) {
-		service.invokeMethod(modTable,"onClick",v);
-	}
-	*/
 
 }

@@ -13,6 +13,7 @@ local V = LPK 'android.view'
 local A = LPK 'android'
 local G = LPK 'android.graphics'
 local P = LPK 'android.provider'
+local T = LPK 'android.text'
 
 local append = table.insert
 local app_package
@@ -329,10 +330,19 @@ function android.pick_contact(me,callback)
     me.a:startActivityForResult(intent,request)
 end
 
+local handlers = {}
+
+function android.intent_for_result (me,intent,callback)
+    append(handlers,callback)
+    me.a:startActivityForResult(intent,#handlers)
+end
+
 function android.onActivityResult(request,result,intent,mod_handler)
     print('request '..request,result,intent,mod_handler)
     local handler = handlers[request]
-    if handler then handler(request,result,intent)
+    if handler then
+        handler(request,result,intent)
+        table.remove(handlers,request)
     elseif mod_handler then
         mod_handler(request,result,intent)
     else
@@ -406,6 +416,20 @@ local function set_edit_args (txt,args)
         end
         txt:setGravity(g)
     end
+    if args.inputType then -- e.g 'TEXT|FLAG_AUTO_COMPLETE' or 'DATETIME|VARIATION_TIME'
+        local types = split(args.inputType,'|')
+        local klass = types[1]:upper()
+        local it = T.InputType['TYPE_CLASS_'..klass]
+        klass = 'TYPE_'..klass..'_'
+        for i = 2,#types do
+            it = it + T.InputType[klass..types[i]:upper()]
+        end
+        txt:setInputType(it)
+    end
+    if args.scrollable then
+        local smm = bind 'android.text.method.ScrollingMovementMethod':getInstance()
+        txt:setMovementMethod(smm)
+    end
     give_id(txt)
 end
 
@@ -445,7 +469,7 @@ function android.parse_size(size)
 end
 
 local function handle_args (args)
-    if type(args) == 'string' then
+    if type(args) ~= 'table' then
         args = {args}
     end
     return args[1] or '',args
@@ -479,9 +503,11 @@ function android.textView (me,args)
 end
 
 function android.imageView(me)
-    --local text,args = handle_args(args)
+    local text,args = handle_args(args)
     local image = W.ImageView(me.a)
-
+    if args.id then
+        image:setId(args.id)
+    end
     return give_id(image)
 end
 

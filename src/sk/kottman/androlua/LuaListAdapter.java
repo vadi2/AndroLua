@@ -26,7 +26,6 @@ public class LuaListAdapter extends BaseAdapter {
 		} catch (LuaException e) {
 			return 0;
 		}		
-		//return (Integer)lua.invokeMethod(impl, "getCount");
 	}
 
 	public Object getItem(int position) {
@@ -38,9 +37,7 @@ public class LuaListAdapter extends BaseAdapter {
 			return res;
 		} catch (LuaException e) {
 			return null;
-		}		
-		
-		//return lua.invokeMethod(impl, "getItem",position);
+		}	
 	}
 
 	public long getItemId(int position) {

@@ -130,7 +130,6 @@ public final class LuaJavaAPI
       {
         return 0;
       }
-
       // push result
       L.pushObjectValue(ret);
 
@@ -150,15 +149,12 @@ public final class LuaJavaAPI
   {
     LuaState L = LuaStateFactory.getExistingState(luaState);
 
-    synchronized (L) {
-      if (!obj.getClass().isArray())
-        throwLuaException(L,"Object indexed is not an array.");
-
-      if (Array.getLength(obj) < index)
-        throwLuaException(L,"Index out of bounds.");
-
-      L.pushObjectValue(Array.get(obj, index - 1));
-
+    synchronized (L) { 
+      try {
+    	  L.pushObjectValue(Array.get(obj, index - 1));
+      } catch (Exception e) { 
+    	  throwLuaException(L,e.getMessage());  
+      }
       return 1;
     }
   }
@@ -699,7 +695,7 @@ public final class LuaJavaAPI
       throwLuaException(L,"Invalid Parameter.");
     }
 
-    return obj;
+    return obj; 
   }
   
   static Map<Class,Method[]> classCache = new HashMap<Class,Method[]>();

@@ -99,7 +99,29 @@ It's still awkward to have to specify the full name of each class to be accessed
 
 `.l` evaluates the Lua file directly, and `.m` writes the module to a location where `require` can find it. (It will clear out the package.loaded table entry so that subsequent `require` calls will pick up the new version.)
 
-A note on style: sometimes we have to be a little bad to do something good. In interactive work, it's useful to break the rule that we don't create too many globals, since it's only possible to access globals from the interactive prompt.
+(A note on style: sometimes we have to be a little bad to do something good. In interactive work, it's useful to break the rule that we don't create too many globals, since it's only possible to access globals from the interactive prompt.)
+
+The file `init.lua` is first loaded by `alshell`. It contains the following useful definitions:
+
+    PK = luajava.package
+    W = PK 'android.widget'
+    G = PK 'android.graphics'
+    V = PK 'android.view'
+    A = PK 'android'
+    L = PK 'java.lang'
+    U = PK 'java.util'
+
+Once the session has started, you may explore the Android API interactively. (`main.a` is a reference to the initial running `LuaActivity` instance):
+
+    > r = main.a:getResources()
+    > = r:getString(A.R_string.ok)
+    OK
+    > = r:getString(A.R_string.cancel)
+    Cancel
+    > = r:getString(A.R_string.dialog_alert_title)
+    Attention
+
+
 
 ## Defining Activities in Lua
 
@@ -122,6 +144,8 @@ For instance, here is a layout-only version of the AndroLua main activity:
     return raw
 
 Note that `onCreate` receives a Java object of type `LuaActivity`; the base class method has already been called.
+
+Also note that the nested class `R.layout` is written with an underscore; this is expanded to '$' when resolving the class. Since generally Java libraries don't use underscores and Lua identifiers cannot contain '$', this is a reasonable hack.
 
 Launching the activity uses the `.a` macro, which ends the current instance, uploads the file and launches the activity:
 
@@ -172,7 +196,7 @@ This 'raw' style is fine, but we can make things even better:
 
 Note that the entry point is now called `create`, and it receives a Lua table which wraps the underlying activity object and provides a set of useful methods. `set_content_view` is straightforward enough, but the application's package is deduced for you.  `wrap_widgets` returns a lazy table which simplifies looking up a layout's widgets by name - it looks up the id in `R.id` and calls `findViewById` for you.
 
-We don't have to use an XML layout, of course.  It's recommended practice because (a) separating layout from code is generally a good idea and (b) it's a pain to create layouts dynamically in Java.
+We don't have to use an XML layout, of course.  It's recommended practice because (a) separating layout from code is generally a good idea and (b) it's a pain to create layouts dynamically in Java.  (The second reason naturally feeds into the first reason - anybody who needs convincing should look at Swing GUI code.)
 
 The `android` module provides a few useful helpers when you wish to avoid XML - such as prototyping a layout dynamically. Here is another version of the main AndroLua activity, this time sans layout:
 
@@ -227,3 +251,68 @@ The following code attaches a callback to the button's click event:
 The global `service` is a reference to the local Lua service object created by AndroLua, which is bound by `LuaActivity`.  (We could just as well have used `loadstring` and avoided having to do some exception catching.)
 
 The `toast` method is an example of turning a common Android one-liner into a no-brainer.  There is only so much room in the average human mind for remembering incantations (and we are all average at least _sometimes_)
+
+(alerts)
+
+Another example is options and context menus. For instance, from the main AndroLua module:
+
+        local function launch (name)
+            return function() me:luaActivity(name) end
+        end
+
+        me:context_menu {
+            view = ctrls.source;
+            "list",launch 'list',
+            "draw",launch 'draw',
+            "icons",launch 'icons'
+        }
+
+`launch` is a classic factory function which generates callbacks. When you long-press the source widget, the context menu will appear.
+
+`options_menu` works in the same way, except that there is no need to specify a view and you can also specify _icons_. This is activated either by the menu button on older phones or the little menu icon on the extreme bottom right.
+
+## Custom List Views in Lua
+
+Android has a number of list view adapters, which are convenient if you have your data as Java objects and if you have the exact layout you need as a resource.
+
+AndroLua has a `LuaListAdapter` class which is backed by a Lua table. In `example/list.lua` (which shows the contents of the Lua global table), a custom view is defined like this:
+
+    local lv = me:luaListView(items,function (impl,position,view,parent)
+        local item = items[position+1] -- position is zero-based...
+        local txt1,txt2
+        if not view then
+            txt1 = me:textView{id = 1, size = '20sp'}
+            txt2 = me:textView{id = 2, background = '#222222'}
+            view = me:hbox{
+                txt1,'+',
+                me:hbox{
+                    txt2,
+                    {fill=false,width=100,gravity='CENTER'}
+                }
+            }
+        else
+            txt1 = view:findViewById(1)
+            txt2 = view:findViewById(2)
+        end
+        txt1:setText(item.name)
+        txt2:setText(item.type)
+        txt1:setTextColor(item.type=='table' and tableclr or otherclr)
+        return view
+    end)
+
+This does the usual optimization and reuses the previously created view.
+
+## Custom Views
+
+A custom view is defined by a Lua table with an `onDraw` function, and optional `onSizeChanged` and `onTouchEvent` functions.  Thereafter things work pretty much as expected.
+
+`example/draw.lua` shows a Lua version of an Android [Java example](http://bestsiteinthemultiverse.com/2008/11/android-graphics-example/)
+
+
+## Performance Questions
+
+LuaJava uses JNI to interface Lua with Java. Although calling C from Java is pretty fast (accessing the C Lua API), calling Java methods from C is slower - effectively a kind of reflection. Then there is the overhead of having to use reflection again to resolve each method call dynamically.  There's some additional performance issues to do with implementation details, which can be improved, but basically this means that you should rather write code in Lua directly than use Java APIs.
+
+Another performance issue has to do with the _interesting_ memory management issues you have with _two_ garbage-collected languages. References to java objects on the Lua side are small objects, so the Lua GC has no way of knowing how important they are, and hang on to references longer than we would wish. So manually calling `collectgarbage` can be useful, but (as always) ensure that the Java objects aren't referenced somewhere sneaky.
+
+

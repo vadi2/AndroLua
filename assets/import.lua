@@ -1,8 +1,13 @@
 --- import.lua
 -- Basic utilities for making LuaJava more convenient to use.
 
-local append = table.insert
+local append,pcall,getmetatable = table.insert,pcall,getmetatable
 local new, bindClass = luajava.new, luajava.bindClass
+local Array
+
+local function new_len (a)
+    return Array:getLength(a)
+end
 
 local function new_tostring (o)
    return o:toString()
@@ -16,9 +21,13 @@ end
 local function call (t,...)
     local obj,stat
     if select('#',...) == 1 and type(select(1,...))=='table' then
-        local ptype = primitive_type(t)
-        t = ptype or t
-        obj = make_array(t,select(1,...))
+        local T = select(1,...)
+        t = primitive_type(t) or t
+        if #T == 0 and T.n then -- e.g. String{n=10}
+            T = T.n
+        end
+        obj = make_array(t,T)
+        getmetatable(obj).__len = new_len
     else
         stat,obj = pcall(new,t,...)
     end
@@ -141,7 +150,7 @@ function enum(e)
    end
 end
 
-local Array = bind 'java.lang.reflect.Array'
+Array = bind 'java.lang.reflect.Array'
 
 --- create a Java array.
 -- @param Type Java type
