@@ -1,4 +1,5 @@
 pretty = require 'android'.new()
+local utils = require 'android.utils'
 
 local LP = luajava.package
 local L = LP 'java.lang'
@@ -20,7 +21,6 @@ local lua_keyword = {
 }
 
 local sep = package.config:sub(1,1)
-local BUFSZ = 1024
 
 function readmodule (me,mod)
     mod = mod:gsub('%.',sep)
@@ -36,18 +36,8 @@ function readmodule (me,mod)
     -- try assets?
     local am = me.a:getAssets()
     local f = am:open(mod..'.lua')
-    local buff = L.Byte{n = BUFSZ}
-    local out = IO.ByteArrayOutputStream(BUFSZ)
-    local n = f:read(buff)
-    while n ~= -1 do
-        out:write(buff,0,n)
-        n = f:read(buff)
-    end
-    f:close()
-    local obuff = out:toByteArray()
-    return tostring(L.String(obuff))
+    return utils.readstring(f)
 end
-
 
 
 function pretty.create (me,mod)

@@ -302,6 +302,50 @@ AndroLua has a `LuaListAdapter` class which is backed by a Lua table. In `exampl
 
 This does the usual optimization and reuses the previously created view.
 
+Another kind of list view has expandable items. It's notorious for being a bitch to setup if you're new to the game. Androlua defines a custom `ExpandableListViewAdapter` which works on Lua tables:
+
+    ela = require 'android'.new()
+
+    -- the data is a list of entries, which are lists of children plus a corresponding
+    -- 'group' field
+    groups = {
+        {group='Cars','Ford','Fiat'},
+        {group='Planes','Boeing','Arbus'},
+        {group='Phones','Apple','Nokia'},
+    }
+
+    function ela.create(me)
+        local elv = me:luaExpandableListView (groups,{
+
+            getGroupView = function (group,groupPos,expanded,view,parent)
+                return me:hbox {me:textView{group,paddingLeft='35sp',size='30sp'}}
+            end,
+
+            getChildView = function  (child,groupPos,childPos,lastChild,view,parent)
+                return me:textView{child,paddingLeft='50sp',size='20sp'}
+            end
+
+        })
+        return elv
+    end
+
+    return ela
+
+You override the two methods that generate the views; note that the signature is slightly different and you are passed the child or group object as well as the positions.
+
+## Asynchronous Threading Support
+
+Threading and Lua do not mix very well, since any particular Lua state is not thread-safe. However, you can launch a new thread together with a new state. The basic functionality is accessed from the global `service` object:
+
+    service:createLuaThread(module_name,data,on_progress,on_post)
+
+The code that's actually run in a different thread/state is referenced by _module name_ - since it's tricky to copy functions across to different Lua states. The `data` is any Java-compatible data - in particular, you may _not_ pass a Lua table. But you can pass numbers, strings, Java arrays and other Java objects like hashmaps.
+
+This currently uses `AsyncTask`, and works in a similar way; your `on_progress` handler will be called whenever the threaded code calls `setProgress` and `on_post` will be called at the end with either the result, or `nil` plus the error message.
+
+The `android.async` module has a few canned recipes - for instance `async.read_http(request,false,callback)` will grab a HTTP request in the background and pass the result as a string to the callback.
+
+
 ## Custom Views
 
 A custom view is defined by a Lua table with an `onDraw` function, and optional `onSizeChanged` and `onTouchEvent` functions.  Thereafter things work pretty much as expected.
@@ -315,4 +359,7 @@ LuaJava uses JNI to interface Lua with Java. Although calling C from Java is pre
 
 Another performance issue has to do with the _interesting_ memory management issues you have with _two_ garbage-collected languages. References to java objects on the Lua side are small objects, so the Lua GC has no way of knowing how important they are, and hang on to references longer than we would wish. So manually calling `collectgarbage` can be useful, but (as always) ensure that the Java objects aren't referenced somewhere sneaky.
 
+It's very straightforward to write your performance-critical code in Java, and access it. The `android` module has a field `android.app` which is a package for accessing your app's default package.
+
+Because most of the overhead happens at the Lua/Java boundary, substituting LuaJIT for regular Lua 5.1 would not give you much benefit, unless you were doing computationally-intensive code in pure Lua without much interfacing with Android. An interesting possibility opens up, however. LuaJIT can interface via FFI to the platform's OpenGL faster than Java can, in fact comparable with C performance. So partitioning a Lua Android application into the 'fast' (direct FFI with platform) and 'slow' (LuaJava to Android Framework) parts can lead to a fast and yet very flexible solution.
 

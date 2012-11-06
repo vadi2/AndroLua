@@ -45,13 +45,17 @@ if req == 'yes' then
     c:receive()
     c2,err = socket.connect(addr,3334)
     if err then
+      c:close()
       return print('cannot connect to secondary socket',err)
     end
+    local m = winapi.mutex()
     t = winapi.thread(function()
-      while true do
+    while true do
         local res = c2:receive()
         res = res:gsub('\001','\n')
+        m:lock()
         io.write(res)
+        m:release()
       end
     end,'ok')
     winapi.sleep(50)

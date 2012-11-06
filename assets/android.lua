@@ -16,7 +16,6 @@ local P = LPK 'android.provider'
 local T = LPK 'android.text'
 
 local append = table.insert
-local app_package
 
 local function split (s,delim)
     local res,pat = {},'[^'..delim..']+'
@@ -26,12 +25,13 @@ local function split (s,delim)
     return res
 end
 
+local app_package
 
-local function get_app_package (a)
+local function get_app_package (me)
     if not app_package then
-        local package_name = a:toString():match '([^@]+)':gsub ('%.%a+$','')
-        android.app = app_package
+        local package_name = me.a:toString():match '([^@]+)':gsub ('%.%a+$','')
         app_package = LPK(package_name)
+        me.app = app_package
     end
     return app_package
 end
@@ -44,7 +44,7 @@ function android.drawable (me,icon_name)
     if name then
         dclass = A.R_drawable
     else
-        dclass = get_app_package(a).R_drawable
+        dclass = get_app_package(me).R_drawable
         name = icon_name
     end
     local did = dclass[name]
@@ -145,11 +145,11 @@ end
 -- @param me
 -- @param me a layout name
 function android.set_content_view (me,name)
-    me.a:setContentView(get_app_package(me.a).R_layout[name])
+    me.a:setContentView(get_app_package(me).R_layout[name])
 end
 
 
-local function safe (a,callback,...)
+function android.safe (callback,...)
     return function(...)
         local ok,res = pcall(callback,...)
         if not ok then
@@ -165,7 +165,7 @@ end
 -- @param callback a Lua function
 function android.on_click_handler (me,callback)
     return (proxy('android.view.View_OnClickListener',{
-        onClick = safe(me,callback)
+        onClick = android.safe(callback)
     }))
 end
 
@@ -182,7 +182,7 @@ end
 -- @param callback a Lua function
 function android.on_long_click_handler (me,callback)
     return (proxy('android.view.View_OnLongClickListener',{
-        onClick = safe(me,callback)
+        onClick = android.safe(callback)
     }))
 end
 
@@ -199,7 +199,7 @@ end
 -- @param callback a Lua function
 function android.on_item_click (me,lv,callback)
     lv:setOnItemClickListener(proxy('android.widget.AdapterView_OnItemClickListener',{
-        onItemClick = safe(me,callback)
+        onItemClick = android.safe(callback)
     }))
 end
 
@@ -224,7 +224,7 @@ function android.alert(me,title,kind,message,callback)
     db:setMessage(message)
     callback = callback or function() end -- for now
     local listener = proxy('android.content.DialogInterface_OnClickListener', {
-        onClick = safe(me,callback)
+        onClick = android.safe(callback)
     })
     if kind == 'ok' then
         db:setNeutralButton("OK",listener)
@@ -259,86 +259,19 @@ function android.dismiss_keyboard (v)
     ime:hideSoftInputFromWindow(v:getWindowToken(),0)
 end
 
-local TAKE_PICTURE, TAKE_PICTURE_EXTRA = 100,101
-
 local handlers = {}
 
-local RESULT_CANCELED = app.Activity.RESULT_CANCELED
-
-function android.take_picture (me,file,callback)
-    local MediaStore = bind 'android.provider.MediaStore'
-    local intent = C.Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-    local request
-    callback = safe(me,callback)
-    if file then
-        local Uri = bind 'android.net.Uri'
-        if not file:match '^/' then
-            file = me.a:getFilesDir()..'/images/'..file
-        end
-        intent:putExtra(MediaStore.EXTRA_OUTPUT, Uri:fromFile(file))
-        request = TAKE_PICTURE_EXTRA
-        handlers[request] = function(_,result,intent)
-            callback(result ~= RESULT_CANCELED)
-        end
-    else
-        request = TAKE_PICTURE
-        handlers[request] = function(_,result,intent)
-            local data
-            print(result,intent)
-            if result ~= RESULT_CANCELED then
-                data = intent:getExtras():get 'data'
-            end
-            callback(data,result,intent)
-        end
-    end
-    LS:log('request '..request)
-    me.a:startActivityForResult(intent,request)
-end
-
-local function get_string(c,key,def)
-    local idx = c:getColumnIndex(key)
-    if idx == -1 then return def end
-    return c:getString(idx)
-end
-
-function android.pick_contact(me,callback)
-    local request = 102
-    local CCC = P.ContactsContract_Contacts
-    local CCP = P.ContactsContract_CommonDataKinds_Phone
-    local CCE = P.ContactsContract_CommonDataKinds_Email
-    callback = safe(me,callback)
-    handlers[request] = function(_,result,intent)
-        if result ~= RESULT_CANCELED then
-            local c = me.a:managedQuery(intent:getData(),nil,nil,nil,nil)
-            if c:moveToFirst() then
-                local res = { uri = intent:getData()}
-                res.id = get_string(c,CCC._ID)
-                res.name = get_string(c,CCC.DISPLAY_NAME)
-                if get_string(c,CCC.HAS_PHONE_NUMBER,'0') ~= '0' then
-                    local phones = me.a:getContentResolver():query(
-                        CCP.CONTENT_URI, nil, CCP.CONTACT_ID..' = '..res.id,
-                        nil,nil
-                    )
-                    phones:moveToFirst()
-                    res.phone = get_string(phones, "data1")
-                end
-                callback(res)
-            end
-        end
-    end
-    local intent = C.Intent(C.Intent.ACTION_PICK,CCC.CONTENT_URI)
-    me.a:startActivityForResult(intent,request)
-end
-
-local handlers = {}
-
+--- start an activity with a callback on result.
+-- Wraps `startActivityForResult`.
+-- @param me
+-- @param intent the Intent
+-- @param callback to be called when the result is returned.
 function android.intent_for_result (me,intent,callback)
     append(handlers,callback)
     me.a:startActivityForResult(intent,#handlers)
 end
 
 function android.onActivityResult(request,result,intent,mod_handler)
-    print('request '..request,result,intent,mod_handler)
     local handler = handlers[request]
     if handler then
         handler(request,result,intent)
@@ -360,26 +293,30 @@ local function give_id (w)
     return w
 end
 
---- make a button.
--- @param me
--- @param text of button
--- @param callback a Lua function or an existing click listener.
--- This is passed the button as its argument
-function android.button (me,text,callback)
-    local b = W.Button(me.a)
-    b:setText(text)
-    if type(callback) == 'function' then
-        callback = me:on_click_handler(callback)
+local function set_view_args (v,args,me)
+    if args.id then
+        v:setId(args.id)
     end
-    b:setOnClickListener(callback)
-    return give_id(b)
+    if args.paddingLeft or args.paddingRight or args.paddingBottom or args.paddingTop then
+        local L,R,B,T = v:getPaddingLeft(), v:getPaddingRight(), v:getPaddingBottom(), v:getPaddingTop()
+        if args.paddingLeft then
+            L = me:parse_size(args.paddingLeft)
+        end
+        if args.paddingTop then
+            T = me:parse_size(args.paddingTop)
+        end
+        if args.paddingRight then
+            R = me:parse_size(args.paddingRight)
+        end
+        if args.paddingBottom then
+            B = me:parse_size(args.paddingBottom)
+        end
+        v:setPadding(L,T,R,B)
+    end
 end
 
-
-local function set_edit_args (txt,args)
-    if args.id then
-        txt:setId(args.id)
-    end
+local function set_edit_args (txt,args,me)
+    set_view_args(txt,args,me)
     if args.textcolor then
         txt:setTextColor(android.parse_color(args.textcolor))
     end
@@ -387,7 +324,7 @@ local function set_edit_args (txt,args)
         txt:setBackgroundColor(android.parse_color(args.background))
     end
     if args.size then
-        txt:setTextSize(android.parse_size(args.size))
+        txt:setTextSize(me:parse_size(args.size))
     end
     if args.maxLines then
         txt:setMaxLines(args.maxLines)
@@ -453,19 +390,18 @@ local TypedValue = bind 'android.util.TypedValue'
 --- parse a size specification.
 -- @param size a number is interpreted as pixels, otherwise a string like '20sp'
 -- or '30dp'. (See android.util.TypedValue.COMPLEX_UNIT_*)
--- @return unit
--- @return size
-function android.parse_size(size)
-    local sz,unit
+-- @return size in pixels
+function android.parse_size(me,size)
     if type(size) == 'string' then
-        sz,unit = size:match '(%d+)(.+)'
+        if not me.metrics then
+            me.metrics = me.a:getResources():getDisplayMetrics()
+        end
+        local sz,unit = size:match '(%d+)(.+)'
         sz = tonumber(sz)
         unit = TypedValue['COMPLEX_UNIT_'..unit:upper()]
-    else
-        sz = size
-        unit = TypedValue.COMPLEX_UNIT_PT
+        size = TypedValue:applyDimension(unit,sz,me.metrics)
     end
-    return unit,sz
+    return size
 end
 
 local function handle_args (args)
@@ -473,6 +409,22 @@ local function handle_args (args)
         args = {args}
     end
     return args[1] or '',args
+end
+
+--- make a button.
+-- @param me
+-- @param text of button
+-- @param callback a Lua function or an existing click listener.
+-- This is passed the button as its argument
+function android.button (me,text,callback)
+    local b = W.Button(me.a)
+    b:setText(text)
+    if type(callback) == 'function' then
+        callback = me:on_click_handler(callback)
+    end
+    b:setOnClickListener(callback)
+    ---? set_view_args(b,args,me)
+    return give_id(b)
 end
 
 --- create an edit widget.
@@ -487,7 +439,7 @@ function android.editText (me,args)
     else
         txt:setHint(text)
     end
-    set_edit_args(txt,args)
+    set_edit_args(txt,args,me)
     return txt
 end
 
@@ -498,16 +450,14 @@ function android.textView (me,args)
     local text,args = handle_args(args)
     local txt = W.TextView(me.a)
     txt:setText(text)
-    set_edit_args(txt,args)
+    set_edit_args(txt,args,me)
     return txt
 end
 
 function android.imageView(me)
     local text,args = handle_args(args)
     local image = W.ImageView(me.a)
-    if args.id then
-        image:setId(args.id)
-    end
+    set_view_args(image,args,me)
     return give_id(image)
 end
 
@@ -537,7 +487,6 @@ function android.luaView(me,t)
     return give_id(service:launchLuaView(me.a,t))
 end
 
-
 local function parse_gravity (s)
     if type(s) == 'string' then
         return V.Gravity[s:upper()]
@@ -545,7 +494,6 @@ local function parse_gravity (s)
         return s
     end
 end
-
 
 local function linear (me,vertical,t)
     local LL = not t.radio and W.LinearLayout or W.RadioGroup
@@ -646,7 +594,7 @@ end
 
 --- create a Lua list view.
 -- @param me
--- @param items a table of Lua values
+-- @param items a list of Lua values
 -- @param optional implementation - not needed if `me`
 -- has a getView function. May be a function, and then it's
 -- assumed to be getView.
@@ -657,6 +605,21 @@ function android.luaListView (me,items,impl)
     local lv = W.ListView(me.a)
     lv:setAdapter(adapter)
     return give_id(lv), adapter
+end
+
+-- create a Lua expandable list view
+-- @param me
+-- @param items a list of lists, where each sublist
+--  has a `group` field for the corresponding group data.
+-- @param impl a table containing at least `getGroupView` and `getChildView`
+-- implementations. (see `example.ela.lua`)
+-- @return list view
+-- @return adapter
+function android.luaExpandableListView (me,items,impl)
+    local adapter = require 'android.ELVA' (items,impl)
+    local elv = W.ExpandableListView(me.a)
+    elv:setAdapter(adapter)
+    return give_id(elv), adapter
 end
 
 --- create a Lua grid view.
@@ -676,12 +639,11 @@ function android.luaGridView (me,items,ncols,impl)
     return give_id(lv), adapter
 end
 
-
 --- make a new AndroLua module.
 function android.new()
     local mod = {}
-    mod.onCreate = function (activity,arg)
-        local me = {a = activity, mod = mod}
+    mod.onCreate = function (activity,arg,state)
+        local me = {a = activity, mod = mod, state = state}
         for k,v in pairs(android) do me[k] = v end
         -- want any module functions available from the wrapper
         setmetatable(me,{
@@ -689,6 +651,7 @@ function android.new()
         })
         mod.me = me
         mod.a = activity
+        get_app_package(me) -- initializes me.app
         local view = mod.create(me,arg)
         mod.view = view
         return view

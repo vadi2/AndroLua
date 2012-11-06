@@ -188,7 +188,7 @@ public class Lua extends Service {
 			return false;
 		if (post != null && ! (post instanceof LuaObject))
 			return false;
-		new LuaThread((LuaObject)progress,(LuaObject)post).execute(mod,arg);
+		new LuaThread((LuaObject)progress,(LuaObject)post,false).execute(mod,arg);
 		return true;
 	}	
 	
@@ -198,6 +198,7 @@ public class Lua extends Service {
 		log("destroying Lua service");
 		serverThread.close();
 		L.close();
+		L = null;
 	}
 	
 	public static void log(String msg) {
@@ -306,14 +307,14 @@ public class Lua extends Service {
 	private class ServerThread extends Thread {
 		public boolean stopped;
 		public Socket client, writer;
-		public ServerSocket server;
+		public ServerSocket server, writeServer;
 
 		@Override
 		public void run() {
 			stopped = false;
 			try {
 				server = new ServerSocket(LISTEN_PORT);
-				ServerSocket writeServer = new ServerSocket(PRINT_PORT);
+				writeServer = new ServerSocket(PRINT_PORT);
 				log("Server started on port " + LISTEN_PORT);
 				while (!stopped) {
 					client = server.accept();					
@@ -372,6 +373,8 @@ public class Lua extends Service {
 				}
 				server.close();
 				writeServer.close();
+				server = null;
+				writeServer = null;
 			} catch (Exception e) {
 				Log.d("client","server "+e.toString());
 				log(e.toString());
@@ -385,12 +388,14 @@ public class Lua extends Service {
 
 		public void close() {
 			try {
-				client.close();
+				if (client != null)
+					client.close();
 				if (writer != null)
 					writer.close();
 				server.close();
+				writeServer.close();
 			} catch(Exception e) {
-				log("problem closing sockets " + e.getMessage());
+				log("problem closing sockets " + e);
 			}
 		}
 	}

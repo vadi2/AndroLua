@@ -21,17 +21,18 @@ public class LuaActivity extends Activity implements ServiceConnection {
 	String modName = null;
 	LuaObject modTable;
 	int argRef = 0;
+	Bundle state;
 
 	/** Called when the activity is first created. */
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
-	    super.onCreate(savedInstanceState);	    
+	    super.onCreate(savedInstanceState);
+	    state = savedInstanceState;
 	    Intent intent = getIntent();
 	    modName = intent.getStringExtra("LUA_MODULE");
 	    argRef = intent.getIntExtra("LUA_MODULE_ARG", 0);
 		Lua.bind(this, this);	    
 	}
-
 	
 	@Override
 	protected void onActivityResult(int request, int result, Intent data) {
@@ -104,7 +105,7 @@ public class LuaActivity extends Activity implements ServiceConnection {
 	}	
 	
 	public void log(String msg) {
-		service.log(msg);
+		Lua.log(msg);
 	}
 	
 	public void onServiceConnected(ComponentName name, IBinder iservice) {
@@ -126,13 +127,13 @@ public class LuaActivity extends Activity implements ServiceConnection {
 	    }
 	    try {
 		    if (modTable.isFunction()) {	    	
-				res = modTable.call(new Object[]{this,arg});
+				res = modTable.call(new Object[]{this,arg,state});
 		    	modTable = null;
 		    } else {
 		    	res = service.invokeMethod(modTable,"onCreate",this,arg);
 		    }
 		} catch (LuaException e) {
-			log("onCreate "+e.getMessage());				
+			log("onCreate "+e.getMessage());
 			res = null;
 		}	    
 	    if (res == null) {
